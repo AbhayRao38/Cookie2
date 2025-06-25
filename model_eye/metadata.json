@@ -1,0 +1,15 @@
+{
+  "model_name": "eye",
+  "total_samples": 22400,
+  "test_samples": 4480,
+  "test_split_ratio": 0.2,
+  "num_classes": 8,
+  "random_state": 42,
+  "generated_files": [
+    "X_eye_test_idx.npy",
+    "eye_softmax_probs.npy",
+    "y_eye_test.npy",
+    "eye_label_encoder.npy"
+  ],
+  "generation_timestamp": "2025-06-24 18:42:47.436326"
+}
