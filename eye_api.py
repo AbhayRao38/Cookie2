@@ -59,7 +59,7 @@ try:
 
     # Ensure binary read and not a placeholder
     logging.info(f"📦 Loading model from {checkpoint_path}")
-    model_data = torch.load(checkpoint_path, map_location=device)
+    model_data = torch.load(checkpoint_path, map_location=device, weights_only=False)
 
     backbone_type = model_data.get('backbone', 'mobilenet')
     weights = ResNet18_Weights.DEFAULT if backbone_type == 'resnet' else MobileNet_V2_Weights.DEFAULT
