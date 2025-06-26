@@ -1,9 +1,4 @@
 __pycache__/
-*.pyc
-*.pkl
-*.npy
-*.h5
-*.pth
 *.log
 .DS_Store
 .env/
