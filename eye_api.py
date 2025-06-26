@@ -17,66 +17,46 @@ logging.basicConfig(level=logging.INFO)
 # ------------------------ Model Definition ------------------------ #
 
 class AdaptiveEmotionCNN(nn.Module):
-    def __init__(self, num_classes=8, pretrained=True, backbone='mobilenet'):
+    def __init__(self, num_classes=8, pretrained=True):
         super(AdaptiveEmotionCNN, self).__init__()
 
-        if backbone == 'resnet':
-            self.backbone = models.resnet18(pretrained=pretrained)
-            num_features = self.backbone.fc.in_features
-            self.backbone.fc = nn.Sequential(
-                nn.Dropout(0.5),
-                nn.Linear(num_features, 512),
-                nn.BatchNorm1d(512),
-                nn.ReLU(),
-                nn.Dropout(0.3),
-                nn.Linear(512, num_classes)
-            )
-        else:
-            self.backbone = models.mobilenet_v2(pretrained=pretrained)
-            num_features = self.backbone.classifier[1].in_features
-            self.backbone.classifier = nn.Sequential(
-                nn.Dropout(0.4),
-                nn.Linear(num_features, 256),
-                nn.ReLU(),
-                nn.Dropout(0.2),
-                nn.Linear(256, num_classes)
-            )
+        # Use only ResNet18
+        self.backbone = models.resnet18(weights=models.ResNet18_Weights.DEFAULT if pretrained else None)
+        num_features = self.backbone.fc.in_features
+        self.backbone.fc = nn.Sequential(
+            nn.Dropout(0.5),
+            nn.Linear(num_features, 512),
+            nn.BatchNorm1d(512),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(512, num_classes)
+        )
 
     def forward(self, x):
         return self.backbone(x)
 
 # ------------------------ Model Initialization ------------------------ #
 
-from torchvision.models import ResNet18_Weights, MobileNet_V2_Weights
-
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-device_type = device.type
 
 try:
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    checkpoint_path = os.path.join(base_dir, f'emotion_model_{device_type}.pth')
-    label_encoder_path = os.path.join(base_dir, f'label_encoder_{device_type}.pkl')
+    checkpoint_path = os.path.join(base_dir, 'emotion_model_cpu.pth' if device.type == 'cpu' else 'emotion_model_cuda.pth')
+    label_encoder_path = os.path.join(base_dir, f'label_encoder_{device.type}.pkl')
 
     logging.info(f"📦 Loading model checkpoint from {checkpoint_path}")
     checkpoint = torch.load(checkpoint_path, map_location=device)
 
-    # Load backbone type from config if available
-    config = checkpoint.get('config', {})
-    backbone_type = config.get('backbone', 'mobilenet')  # fallback to mobilenet
-
-    # Set appropriate weights for the backbone
-    weights = ResNet18_Weights.DEFAULT if backbone_type == 'resnet' else MobileNet_V2_Weights.DEFAULT
-
-    # Initialize the model with correct backbone
-    eye_model = AdaptiveEmotionCNN(num_classes=8, pretrained=True, backbone=backbone_type)
-    eye_model.load_state_dict(checkpoint['model_state_dict'])
+    # Force backbone to be ResNet only
+    eye_model = AdaptiveEmotionCNN(num_classes=8, pretrained=True)
+    eye_model.load_state_dict(checkpoint['model_state_dict'], strict=True)
     eye_model.to(device)
     eye_model.eval()
 
     # Load the label encoder
     label_encoder = joblib.load(label_encoder_path)
 
-    logging.info(f"✅ Successfully loaded eye model ({backbone_type}) on {device}")
+    logging.info(f"✅ Successfully loaded ResNet18-based eye model on {device}")
 
 except Exception as e:
     logging.error(f"❌ Failed to load eye model from {checkpoint_path}: {e}")
@@ -100,7 +80,7 @@ def health_check():
         'status': 'healthy' if eye_model else 'error',
         'model_loaded': eye_model is not None,
         'device': str(device),
-        'model_type': 'AdaptiveEmotionCNN'
+        'model_type': 'AdaptiveEmotionCNN (ResNet18)'
     })
 
 @app.route('/predict/eye', methods=['POST'])
