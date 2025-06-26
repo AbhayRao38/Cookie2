@@ -57,23 +57,23 @@ try:
     checkpoint_path = os.path.join(base_dir, f'emotion_model_{device_type}.pth')
     label_encoder_path = os.path.join(base_dir, f'label_encoder_{device_type}.pkl')
 
-    # Log model loading
     logging.info(f"📦 Loading model checkpoint from {checkpoint_path}")
-
-    # Load model checkpoint safely with map_location
     checkpoint = torch.load(checkpoint_path, map_location=device)
 
-    # Load backbone type if available (fallback: MobileNet)
-    backbone_type = checkpoint.get('config', {}).get('backbone', 'mobilenet')
+    # Load backbone type from config if available
+    config = checkpoint.get('config', {})
+    backbone_type = config.get('backbone', 'mobilenet')  # fallback to mobilenet
+
+    # Set appropriate weights for the backbone
     weights = ResNet18_Weights.DEFAULT if backbone_type == 'resnet' else MobileNet_V2_Weights.DEFAULT
 
-    # Re-initialize model and load weights
-    eye_model = AdaptiveEmotionCNN(num_classes=8, pretrained=True, device_type=device_type)
+    # Initialize the model with correct backbone
+    eye_model = AdaptiveEmotionCNN(num_classes=8, pretrained=True, backbone=backbone_type)
     eye_model.load_state_dict(checkpoint['model_state_dict'])
     eye_model.to(device)
     eye_model.eval()
 
-    # Load LabelEncoder using joblib
+    # Load the label encoder
     label_encoder = joblib.load(label_encoder_path)
 
     logging.info(f"✅ Successfully loaded eye model ({backbone_type}) on {device}")
