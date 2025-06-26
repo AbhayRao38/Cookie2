@@ -54,8 +54,8 @@ device_type = device.type
 
 try:
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    checkpoint_path = os.path.join(base_dir, f'emotion_model_{device_type}.pth.txt')
-    label_encoder_path = os.path.join(base_dir, f'label_encoder_{device_type}.pkl.txt')
+    checkpoint_path = os.path.join(base_dir, f'emotion_model_{device_type}.pth')
+    label_encoder_path = os.path.join(base_dir, f'label_encoder_{device_type}.pkl')
 
     # Ensure binary read and not a placeholder
     logging.info(f"📦 Loading model from {checkpoint_path}")
