@@ -57,7 +57,7 @@ try:
     checkpoint_path = os.path.join(base_dir, f'emotion_model_{device_type}.pth.txt')
     label_encoder_path = os.path.join(base_dir, f'label_encoder_{device_type}.pkl.txt')
 
-    model_data = torch.load(checkpoint_path, map_location=device)
+    model_data = torch.load(checkpoint_path, map_location=device, weights_only=False)
     backbone_type = model_data.get('backbone', 'mobilenet')
     logging.info(f"🔍 Loading model with backbone: {backbone_type}")
 
