@@ -9,6 +9,7 @@ import albumentations as A
 from albumentations.pytorch import ToTensorV2
 import cv2
 import logging
+import os
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -16,7 +17,6 @@ logging.basicConfig(level=logging.INFO)
 # ------------------------ Model Definition ------------------------ #
 
 class AdaptiveEmotionCNN(nn.Module):
-    """Adaptive CNN model for emotion recognition from eye images"""
     def __init__(self, num_classes=8, pretrained=True, backbone='mobilenet'):
         super(AdaptiveEmotionCNN, self).__init__()
 
@@ -31,7 +31,7 @@ class AdaptiveEmotionCNN(nn.Module):
                 nn.Dropout(0.3),
                 nn.Linear(512, num_classes)
             )
-        else:  # MobileNetV2 by default
+        else:
             self.backbone = models.mobilenet_v2(pretrained=pretrained)
             num_features = self.backbone.classifier[1].in_features
             self.backbone.classifier = nn.Sequential(
@@ -53,30 +53,21 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 device_type = device.type
 
 try:
-    checkpoint_path = f'emotion_model_{device_type}.pth.txt'
-    label_encoder_path = f'label_encoder_{device_type}.pkl.txt'
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    checkpoint_path = os.path.join(base_dir, f'emotion_model_{device_type}.pth.txt')
+    label_encoder_path = os.path.join(base_dir, f'label_encoder_{device_type}.pkl.txt')
 
-    # Load model checkpoint
     model_data = torch.load(checkpoint_path, map_location=device)
-
-    # Determine backbone
     backbone_type = model_data.get('backbone', 'mobilenet')
     logging.info(f"🔍 Loading model with backbone: {backbone_type}")
 
-    # Select proper weights (avoids deprecation warning)
-    if backbone_type == 'resnet':
-        weights = ResNet18_Weights.DEFAULT
-    else:
-        weights = MobileNet_V2_Weights.DEFAULT
+    weights = ResNet18_Weights.DEFAULT if backbone_type == 'resnet' else MobileNet_V2_Weights.DEFAULT
 
-    # Initialize and load model
     eye_model = AdaptiveEmotionCNN(num_classes=8, backbone=backbone_type, pretrained=True)
     eye_model.load_state_dict(model_data['model_state_dict'])
-
     eye_model.to(device)
     eye_model.eval()
 
-    # Load label encoder
     label_encoder = joblib.load(label_encoder_path)
 
     logging.info(f"✅ Successfully loaded eye model ({backbone_type}) on {device}")
@@ -109,48 +100,29 @@ def health_check():
 @app.route('/predict/eye', methods=['POST'])
 def predict_eye():
     if eye_model is None:
-        return jsonify({
-            'success': False,
-            'error': 'Eye model not loaded'
-        }), 500
+        return jsonify({'success': False, 'error': 'Eye model not loaded'}), 500
 
     try:
-        if 'file' not in request.files:
-            return jsonify({
-                'success': False,
-                'error': 'No file provided'
-            }), 400
+        if 'file' not in request.files or request.files['file'].filename == '':
+            return jsonify({'success': False, 'error': 'No file provided'}), 400
 
-        image_file = request.files['file']
-        if image_file.filename == '':
-            return jsonify({
-                'success': False,
-                'error': 'No file selected'
-            }), 400
-
-        # Read image
-        image = Image.open(image_file.stream).convert('RGB')
+        image = Image.open(request.files['file'].stream).convert('RGB')
         image_np = np.array(image)
-
-        # Preprocess
         transform = get_transforms()
         transformed = transform(image=image_np)
         image_tensor = transformed['image'].unsqueeze(0).to(device)
 
-        # Predict
         with torch.no_grad():
             outputs = eye_model(image_tensor)
             probabilities = torch.softmax(outputs, dim=1).cpu().numpy()[0]
             predicted_class = int(np.argmax(probabilities))
             confidence = float(np.max(probabilities))
 
-        # Decode emotion
         emotion_labels = label_encoder.classes_.tolist() if label_encoder else [
             'Anger', 'Contempt', 'Disgust', 'Fear', 'Happiness', 'Neutral', 'Sadness', 'Surprise'
         ]
         predicted_emotion = emotion_labels[predicted_class] if predicted_class < len(emotion_labels) else 'Unknown'
 
-        # Binary probability for MCI-relevant emotions
         mci_relevant_emotions = ['Anger', 'Fear', 'Disgust', 'Sadness']
         mci_probability = confidence if predicted_emotion in mci_relevant_emotions else (1 - confidence)
         binary_probs = [1 - mci_probability, mci_probability]
@@ -166,10 +138,7 @@ def predict_eye():
 
     except Exception as e:
         logging.error(f"Error in eye prediction: {e}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # ------------------------ App Start ------------------------ #
 
