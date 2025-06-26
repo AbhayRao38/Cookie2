@@ -13,6 +13,8 @@ import logging
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 
+# ------------------------ Model Definition ------------------------ #
+
 class AdaptiveEmotionCNN(nn.Module):
     """Adaptive CNN model for emotion recognition from eye images"""
     def __init__(self, num_classes=8, pretrained=True, backbone='mobilenet'):
@@ -43,36 +45,38 @@ class AdaptiveEmotionCNN(nn.Module):
     def forward(self, x):
         return self.backbone(x)
 
-# Load model
+# ------------------------ Model Initialization ------------------------ #
+
 from torchvision.models import ResNet18_Weights, MobileNet_V2_Weights
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 device_type = device.type
 
 try:
+    checkpoint_path = f'emotion_model_{device_type}.pth.txt'
+    label_encoder_path = f'label_encoder_{device_type}.pkl.txt'
+
     # Load model checkpoint
-    checkpoint_path = f'emotion_model_{device_type}.pth'
     model_data = torch.load(checkpoint_path, map_location=device)
 
     # Determine backbone
-    backbone_type = model_data.get('backbone', 'mobilenet')  # fallback to mobilenet
+    backbone_type = model_data.get('backbone', 'mobilenet')
     logging.info(f"🔍 Loading model with backbone: {backbone_type}")
 
-    # Use correct weights to avoid torchvision deprecation warning
+    # Select proper weights (avoids deprecation warning)
     if backbone_type == 'resnet':
         weights = ResNet18_Weights.DEFAULT
     else:
         weights = MobileNet_V2_Weights.DEFAULT
 
-    # Initialize model with correct backbone and weights
+    # Initialize and load model
     eye_model = AdaptiveEmotionCNN(num_classes=8, backbone=backbone_type, pretrained=True)
     eye_model.load_state_dict(model_data['model_state_dict'])
 
     eye_model.to(device)
     eye_model.eval()
 
-    # Load corresponding label encoder
-    label_encoder_path = f'label_encoder_{device_type}.pkl'
+    # Load label encoder
     label_encoder = joblib.load(label_encoder_path)
 
     logging.info(f"✅ Successfully loaded eye model ({backbone_type}) on {device}")
@@ -82,14 +86,16 @@ except Exception as e:
     eye_model = None
     label_encoder = None
 
+# ------------------------ Image Preprocessing ------------------------ #
 
 def get_transforms():
-    """Preprocessing transforms for input eye image"""
     return A.Compose([
         A.Resize(224, 224, interpolation=cv2.INTER_LINEAR),
         A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
         ToTensorV2()
     ])
+
+# ------------------------ API Endpoints ------------------------ #
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -122,10 +128,11 @@ def predict_eye():
                 'error': 'No file selected'
             }), 400
 
-        # Load and preprocess image
+        # Read image
         image = Image.open(image_file.stream).convert('RGB')
         image_np = np.array(image)
 
+        # Preprocess
         transform = get_transforms()
         transformed = transform(image=image_np)
         image_tensor = transformed['image'].unsqueeze(0).to(device)
@@ -137,13 +144,13 @@ def predict_eye():
             predicted_class = int(np.argmax(probabilities))
             confidence = float(np.max(probabilities))
 
-        # Decode label
+        # Decode emotion
         emotion_labels = label_encoder.classes_.tolist() if label_encoder else [
             'Anger', 'Contempt', 'Disgust', 'Fear', 'Happiness', 'Neutral', 'Sadness', 'Surprise'
         ]
         predicted_emotion = emotion_labels[predicted_class] if predicted_class < len(emotion_labels) else 'Unknown'
 
-        # Compute binary MCI-relevant probability
+        # Binary probability for MCI-relevant emotions
         mci_relevant_emotions = ['Anger', 'Fear', 'Disgust', 'Sadness']
         mci_probability = confidence if predicted_emotion in mci_relevant_emotions else (1 - confidence)
         binary_probs = [1 - mci_probability, mci_probability]
@@ -163,6 +170,8 @@ def predict_eye():
             'success': False,
             'error': str(e)
         }), 500
+
+# ------------------------ App Start ------------------------ #
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5002, debug=False)
