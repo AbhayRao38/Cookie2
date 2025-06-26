@@ -44,31 +44,44 @@ class AdaptiveEmotionCNN(nn.Module):
         return self.backbone(x)
 
 # Load model
+from torchvision.models import ResNet18_Weights, MobileNet_V2_Weights
+
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 device_type = device.type
 
 try:
     # Load model checkpoint
-    model_data = torch.load(f'emotion_model_{device_type}.pth', map_location=device)
+    checkpoint_path = f'emotion_model_{device_type}.pth'
+    model_data = torch.load(checkpoint_path, map_location=device)
 
-    # Dynamically get backbone type
+    # Determine backbone
     backbone_type = model_data.get('backbone', 'mobilenet')  # fallback to mobilenet
+    logging.info(f"🔍 Loading model with backbone: {backbone_type}")
 
-    # Initialize model with correct architecture
-    eye_model = AdaptiveEmotionCNN(num_classes=8, backbone=backbone_type)
+    # Use correct weights to avoid torchvision deprecation warning
+    if backbone_type == 'resnet':
+        weights = ResNet18_Weights.DEFAULT
+    else:
+        weights = MobileNet_V2_Weights.DEFAULT
+
+    # Initialize model with correct backbone and weights
+    eye_model = AdaptiveEmotionCNN(num_classes=8, backbone=backbone_type, pretrained=True)
     eye_model.load_state_dict(model_data['model_state_dict'])
+
     eye_model.to(device)
     eye_model.eval()
 
-    # Load label encoder
-    label_encoder = joblib.load(f'label_encoder_{device_type}.pkl')
+    # Load corresponding label encoder
+    label_encoder_path = f'label_encoder_{device_type}.pkl'
+    label_encoder = joblib.load(label_encoder_path)
 
-    logging.info(f"✅ Eye model loaded successfully with {backbone_type} on {device}")
+    logging.info(f"✅ Successfully loaded eye model ({backbone_type}) on {device}")
 
 except Exception as e:
-    logging.error(f"❌ Failed to load eye model: {e}")
+    logging.error(f"❌ Failed to load eye model from {checkpoint_path}: {e}")
     eye_model = None
     label_encoder = None
+
 
 def get_transforms():
     """Preprocessing transforms for input eye image"""
