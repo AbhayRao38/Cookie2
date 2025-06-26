@@ -4,7 +4,15 @@ __pycache__/
 .env/
 *.zip
 *.dll
-training.py
 model_eye/train/
 model_eye/test/
 model_eye/val/
+accuracy_comparison.png
+comprehensive_evaluation_results.pkl
+confusion_matrices_detailed.png
+densenet121_emotion_model.pth
+efficientnet_b0_emotion_model.pth
+model_comparison_overview.png
+multi_model_comparison_results.pkl
+performance_metrics.png
+resnet18_emotion_model.pth
