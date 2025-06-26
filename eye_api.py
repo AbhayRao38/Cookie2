@@ -57,10 +57,11 @@ try:
     checkpoint_path = os.path.join(base_dir, f'emotion_model_{device_type}.pth.txt')
     label_encoder_path = os.path.join(base_dir, f'label_encoder_{device_type}.pkl.txt')
 
-    model_data = torch.load(checkpoint_path, map_location=device, weights_only=False)
-    backbone_type = model_data.get('backbone', 'mobilenet')
-    logging.info(f"🔍 Loading model with backbone: {backbone_type}")
+    # Ensure binary read and not a placeholder
+    logging.info(f"📦 Loading model from {checkpoint_path}")
+    model_data = torch.load(checkpoint_path, map_location=device)
 
+    backbone_type = model_data.get('backbone', 'mobilenet')
     weights = ResNet18_Weights.DEFAULT if backbone_type == 'resnet' else MobileNet_V2_Weights.DEFAULT
 
     eye_model = AdaptiveEmotionCNN(num_classes=8, backbone=backbone_type, pretrained=True)
@@ -91,7 +92,7 @@ def get_transforms():
 @app.route('/health', methods=['GET'])
 def health_check():
     return jsonify({
-        'status': 'healthy',
+        'status': 'healthy' if eye_model else 'error',
         'model_loaded': eye_model is not None,
         'device': str(device),
         'model_type': 'AdaptiveEmotionCNN'
@@ -137,7 +138,7 @@ def predict_eye():
         })
 
     except Exception as e:
-        logging.error(f"Error in eye prediction: {e}")
+        logging.error(f"❌ Error in eye prediction: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 # ------------------------ App Start ------------------------ #
